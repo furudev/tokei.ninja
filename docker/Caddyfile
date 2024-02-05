@@ -1,0 +1,56 @@
+{
+	# Debug
+	{$DEBUG}
+
+	frankenphp {
+		#worker /path/to/your/worker.php
+		{$FRANKENPHP_CONFIG}
+		order php_server before file_server
+	}
+}
+
+{$SITE_NAME} {
+	tls /etc/app/certs/{$SITE_NAME}.pem /etc/app/certs/{$SITE_NAME}-key.pem
+
+	route {
+		root * public/
+		# Add trailing slash for directory requests
+		@canonicalPath {
+			file {path}/index.php
+			not path */
+		}
+		redir @canonicalPath {path}/ 308
+		# If the requested file does not exist, try index files
+		@indexFiles file {
+			try_files {path} {path}/index.php index.php
+			split_path .php
+		}
+		rewrite @indexFiles {http.matchers.file.relative}
+		# FrankenPHP!
+
+		# Static assets caching - uncomment to use
+		# @static {
+		# 	file
+		# 	path *.woff2 *.css *.js *.webp *.svg *.png *.jpg *.jpeg *.avif *.gif *.ico
+		# }
+
+		# header @static Cache-Control "public, max-age=31536000, must-revalidate"
+
+		# GZIP compression
+		encode zstd gzip {
+			minimum_length 1
+			match {
+				header Content-Type text/*
+				header Content-Type application/json*
+				header Content-Type application/javascript*
+				header Content-Type application/xhtml+xml*
+				header Content-Type application/atom+xml*
+				header Content-Type application/rss+xml*
+				header Content-Type image/svg+xml*
+			}
+		}
+		@phpFiles path *.php
+		php @phpFiles
+		file_server
+	}
+}

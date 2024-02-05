@@ -1,0 +1,26 @@
+{
+  "name": "tokei-ninja",
+  "module": "server.ts",
+  "author": "Szymon Ratajczyk",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "watch": "bun server.ts",
+    "build:client": "SITE_NAME=jutsu.ninja PORT=8081 bun build client.ts --outfile ../app/client.min.js --minify",
+    "format": "biome format . --write",
+    "lint": "biome lint . --apply"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "1.5.3",
+    "@types/bun": "latest",
+    "kolorist": "1.8.0",
+    "lightningcss": "1.23.0",
+    "lightningcss-cli": "1.23.0"
+  },
+  "peerDependencies": {
+    "typescript": "^5.3.3"
+  },
+  "browserslist": [
+    "defaults"
+  ]
+}

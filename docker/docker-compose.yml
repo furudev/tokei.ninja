@@ -1,0 +1,15 @@
+version: '3.9'
+name: tokei_ninja
+
+services:
+  php:
+    image: dunglas/frankenphp
+    ports:
+      - 443:443
+    environment:
+      SITE_NAME: ${SITE_NAME}
+    volumes:
+      - ../app:/app/public
+      - ../certs:/etc/app/certs
+      - ./Caddyfile:/etc/caddy/Caddyfile
+    tty: true
