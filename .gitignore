@@ -3,5 +3,6 @@
 certs/*
 vendor
 composer.lock
+client.min.js
 
 !certs/.gitkeep

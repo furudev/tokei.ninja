@@ -1,12 +1,12 @@
 {
   "name": "tokei-ninja",
   "module": "server.ts",
-  "author": "Szymon Ratajczyk",
+  "author": "furu.dev",
   "license": "MIT",
   "type": "module",
   "scripts": {
     "watch": "bun server.ts",
-    "build:client": "SITE_NAME=jutsu.ninja PORT=8081 bun build client.ts --outfile ../app/client.min.js --minify",
+    "build:client": "bun build client.ts --outfile ../app/client.min.js --minify --define Bun.env.SITE_NAME=$SITE_NAME --define Bun.env.PORT=$PORT",
     "format": "biome format . --write",
     "lint": "biome lint . --apply"
   },

@@ -1,5 +1,5 @@
-const SITE_NAME = process.env.SITE_NAME || window.location.pathname;
-const PORT = process.env.PORT || 8080;
+const SITE_NAME = Bun.env.SITE_NAME || window.location.pathname;
+const PORT = Bun.env.PORT || 8080;
 
 const socket = new WebSocket(`wss://${SITE_NAME}:${PORT}`);
 

@@ -1,5 +1,4 @@
-import { watch } from 'fs';
-import { file } from 'bun';
+import { type WatchEventType, watch } from 'fs';
 import { gray, green, red } from 'kolorist';
 import { transform } from 'lightningcss';
 
@@ -8,9 +7,10 @@ const PORT = Bun.env.PORT || 8080;
 const APP_DIR = '../app';
 const CERTS_DIR = '../certs';
 const SRC_DIR = `${APP_DIR}/src`;
-const ASSETS_DIR = `${SRC_DIR}/assets`;
 const PUBLIC_DIR = `${APP_DIR}/public`;
 const BUILD_DIR = `${PUBLIC_DIR}/build`;
+
+// REFACTOR: simplify watchers (maybe some config)
 
 type AllowedFileType = {
   ext: `.${string}`;
@@ -21,8 +21,13 @@ const getFilenameWithoutExt = (filename: string) => {
   return filename.split('/').at(-1)?.split('.').at(0);
 };
 
-const getExt = (filename: string) => {
-  return filename.split('/').at(-1)?.split('.').at(-1);
+const getExt = (filename: string, withDot?: boolean) => {
+  const ext = filename.split('/').at(-1)?.split('.').at(-1);
+
+  if (withDot) {
+    return `.${ext}`;
+  }
+  return ext;
 };
 
 const handleTransformError = (error: Error, filename: string) => {
@@ -35,7 +40,7 @@ const handleTransformError = (error: Error, filename: string) => {
   );
 };
 
-const ALLOWED_FILE_TYPES: AllowedFileType[] = [
+const allowedFilesConfig: AllowedFileType[] = [
   {
     ext: '.php',
     transformer: async (filename) => {},
@@ -43,7 +48,7 @@ const ALLOWED_FILE_TYPES: AllowedFileType[] = [
   {
     ext: '.css',
     transformer: async (filename) => {
-      const file = Bun.file(`${ASSETS_DIR}/${filename}`);
+      const file = Bun.file(`${SRC_DIR}/${filename}`);
       const fileContent = await file.text();
       const fileBuffer = Buffer.from(await file.arrayBuffer());
 
@@ -57,13 +62,15 @@ const ALLOWED_FILE_TYPES: AllowedFileType[] = [
         `${BUILD_DIR}/${getFilenameWithoutExt(filename)}.min.css`,
         code,
       );
+      // BUG: transformer calls are increasing each time when we update a file.
+      console.log(`TRANSFORMER CALLED: ${filename}`);
     },
   },
   {
     ext: '.ts',
     transformer: async (filename) => {
       await Bun.build({
-        entrypoints: [`${ASSETS_DIR}/${filename}`],
+        entrypoints: [`${SRC_DIR}/${filename}`],
         outdir: BUILD_DIR,
         minify: true,
         naming: '[dir]/[name].min.[ext]',
@@ -72,19 +79,16 @@ const ALLOWED_FILE_TYPES: AllowedFileType[] = [
   },
 ];
 
-const globalWatcher = () => {
-  return watch(SRC_DIR, { recursive: true }, (event, filename) => {
-    if (!filename) {
-      throw new Error(`${filename} is undefined.`);
-    }
+const watcherCallback = (event: WatchEventType, filename: string | null) => {
+  if (!filename) {
+    throw new Error(`${filename} is undefined.`);
+  }
 
-    console.log(
-      `[⌚️] ${gray('File:')} ${filename} | ${gray('Event:')} ${event}`,
-    );
-  });
+  console.log(`[⌚️] ${gray('File:')} ${filename} | ${gray('Event:')} ${event}`);
 };
 
-const watcher = globalWatcher();
+const srcWatcher = watch(SRC_DIR, { recursive: true }, watcherCallback);
+const indexWatcher = watch(`${APP_DIR}/index.php`, {}, watcherCallback);
 
 Bun.serve({
   fetch(req, server) {
@@ -99,21 +103,41 @@ Bun.serve({
       ws.send('[⌚️ Tokei] Connection with server established.');
     },
     async message(ws) {
-      for await (const fileType of ALLOWED_FILE_TYPES) {
-        watcher.on('change', async (event, filename) => {
-          try {
-            await fileType.transformer(filename.toString());
+      indexWatcher.on('change', async (event, filename) => {
+        try {
+          await allowedFilesConfig
+            .find(({ ext }) => ext === '.php')
+            ?.transformer(filename.toString());
 
-            ws.send(event);
-          } catch (error) {
-            if (!(error instanceof Error)) {
-              return;
-            }
-
-            handleTransformError(error, filename.toString());
+          ws.send(event);
+        } catch (error) {
+          if (!(error instanceof Error)) {
+            return;
           }
-        });
-      }
+
+          handleTransformError(error, filename.toString());
+        }
+      });
+      srcWatcher.on('change', async (event, filename) => {
+        try {
+          for await (const fileType of allowedFilesConfig) {
+            if (fileType.ext === getExt(filename.toString(), true)) {
+              await fileType.transformer(filename.toString());
+            }
+          }
+
+          ws.send(event);
+        } catch (error) {
+          if (!(error instanceof Error)) {
+            return;
+          }
+
+          handleTransformError(error, filename.toString());
+        }
+      });
+    },
+    close(ws, code) {
+      ws.send(`[⌚️ Tokei] Connection closed with status: ${code}.`);
     },
     perMessageDeflate: true,
   },
@@ -127,7 +151,8 @@ Bun.serve({
 console.log(`[⌚️ Tokei] Watching for changes on port: ${green(PORT)}`);
 process.on('SIGINT', () => {
   console.log(`\n[⌚️ Tokei] ${green('See you soon, Ninja!')} Bye 👋`);
-  watcher.close();
+  indexWatcher.close();
+  srcWatcher.close();
 
   process.exit();
 });
